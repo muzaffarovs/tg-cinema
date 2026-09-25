@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/details/BackLink";
-import { EpisodeList, type EpisodeView } from "@/components/details/EpisodeList";
+import { EpisodeList } from "@/components/details/EpisodeList";
 import { Overview } from "@/components/details/Overview";
 import { TmdbImage } from "@/components/ui/TmdbImage";
 import { requireSession } from "@/lib/auth";
-import { formatDate, formatRuntime } from "@/lib/format";
 import { getSeasonDetails, getTvDetails } from "@/lib/tmdb/api";
+import { toEpisodeViews } from "@/lib/tmdb/normalize";
 import { parseSeason, parseTmdbId } from "@/lib/validation";
 
 type Params = Promise<{ id: string; season: string }>;
@@ -31,18 +31,7 @@ export async function generateMetadata({ params }: PageProps<"/tv/[id]/season/[s
 export default async function SeasonPage({ params }: PageProps<"/tv/[id]/season/[season]">) {
   await requireSession();
   const { show, season } = await load(params);
-  const today = new Date().toISOString().slice(0, 10);
-
-  const episodes: EpisodeView[] = season.episodes.map((e) => ({
-    id: e.id,
-    season: e.season_number,
-    episode: e.episode_number,
-    name: e.name,
-    overview: e.overview,
-    stillPath: e.still_path,
-    meta: [formatDate(e.air_date) ?? "TBA", formatRuntime(e.runtime)].filter(Boolean).join(" · "),
-    released: Boolean(e.air_date && e.air_date <= today),
-  }));
+  const episodes = toEpisodeViews(season.episodes);
 
   const seasons = show.seasons.filter((s) => s.episode_count > 0);
 

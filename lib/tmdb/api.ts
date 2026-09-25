@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { getTmdbRegion } from "@/lib/env";
 import type { SearchScope } from "@/lib/validation";
-import type { BrowseResult, MediaItem, MediaType } from "@/types/media";
+import type { BrowseResult, MediaItem, MediaType, SeasonPayload } from "@/types/media";
 import type {
   TmdbGenre,
   TmdbMovieDetails,
@@ -14,7 +14,7 @@ import type {
   TmdbTvSummary,
 } from "@/types/tmdb";
 import { tmdbFetch, TmdbError } from "./client";
-import { dedupeItems, movieToItem, multiToItems, tvToItem } from "./normalize";
+import { dedupeItems, movieToItem, multiToItems, toEpisodeViews, toSeasonOptions, tvToItem } from "./normalize";
 
 const HOUR = 3600;
 const LIST_TTL = HOUR;
@@ -188,3 +188,10 @@ export const getTvDetails = cache((id: number) =>
 export const getSeasonDetails = cache((id: number, season: number) =>
   orNull(tmdbFetch<TmdbSeasonDetails>(`/tv/${id}/season/${season}`, { revalidate: DETAILS_TTL })),
 );
+
+/** A season's episodes plus the show's season list; null if either doesn't exist. */
+export async function getSeasonPayload(id: number, season: number): Promise<SeasonPayload | null> {
+  const [show, details] = await Promise.all([getTvDetails(id), getSeasonDetails(id, season)]);
+  if (!show || !details) return null;
+  return { season, seasons: toSeasonOptions(show.seasons), episodes: toEpisodeViews(details.episodes) };
+}

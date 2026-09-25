@@ -1,16 +1,21 @@
+import { formatDate, formatRuntime } from "@/lib/format";
 import type {
+  EpisodeView,
   MediaItem,
   Person,
   Provider,
   RegionWatchProviders,
+  SeasonOption,
   Trailer,
 } from "@/types/media";
 import type {
   TmdbAggregateCastMember,
   TmdbCastMember,
+  TmdbEpisode,
   TmdbMovieSummary,
   TmdbMultiResult,
   TmdbProvider,
+  TmdbSeasonSummary,
   TmdbTvSummary,
   TmdbVideo,
   TmdbWatchProviders,
@@ -117,4 +122,28 @@ export function dedupeItems(items: MediaItem[]): MediaItem[] {
     seen.add(key);
     return true;
   });
+}
+
+/** Seasons that have episodes, regular seasons first and specials (0) last. */
+export function toSeasonOptions(seasons: TmdbSeasonSummary[]): SeasonOption[] {
+  return seasons
+    .filter((s) => s.episode_count > 0)
+    .sort(
+      (a, b) =>
+        (a.season_number === 0 ? 1 : 0) - (b.season_number === 0 ? 1 : 0) || a.season_number - b.season_number,
+    )
+    .map((s) => ({ season: s.season_number, name: s.name, episodeCount: s.episode_count }));
+}
+
+export function toEpisodeViews(episodes: TmdbEpisode[], today = new Date().toISOString().slice(0, 10)): EpisodeView[] {
+  return episodes.map((e) => ({
+    id: e.id,
+    season: e.season_number,
+    episode: e.episode_number,
+    name: e.name,
+    overview: e.overview,
+    stillPath: e.still_path,
+    meta: [formatDate(e.air_date) ?? "TBA", formatRuntime(e.runtime)].filter(Boolean).join(" · "),
+    released: Boolean(e.air_date && e.air_date <= today),
+  }));
 }

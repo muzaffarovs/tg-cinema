@@ -48,3 +48,27 @@ export interface BrowseResult {
   page: number;
   totalPages: number;
 }
+
+export interface SeasonOption {
+  season: number;
+  name: string;
+  episodeCount: number;
+}
+
+export interface EpisodeView {
+  id: number;
+  season: number;
+  episode: number;
+  name: string;
+  overview: string;
+  stillPath: string | null;
+  meta: string;
+  released: boolean;
+}
+
+/** One season's episodes plus the show's season list (for pickers). */
+export interface SeasonPayload {
+  season: number;
+  seasons: SeasonOption[];
+  episodes: EpisodeView[];
+}

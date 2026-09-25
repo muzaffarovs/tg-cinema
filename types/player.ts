@@ -20,8 +20,6 @@ export type PlayRequest =
       season: number;
       episode: number;
       episodeName: string | null;
-      /** Episodes that follow this one, for "Next episode". */
-      upNext?: EpisodeRef[];
     });
 
 export interface PlaybackResponse {

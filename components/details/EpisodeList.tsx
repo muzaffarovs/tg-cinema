@@ -5,18 +5,7 @@ import { haptic } from "@/lib/telegram/webapp";
 import { usePlayer } from "@/components/player/PlayerProvider";
 import { TmdbImage } from "@/components/ui/TmdbImage";
 import { PlayIcon } from "@/components/ui/icons";
-import type { EpisodeRef } from "@/types/player";
-
-export interface EpisodeView {
-  id: number;
-  season: number;
-  episode: number;
-  name: string;
-  overview: string;
-  stillPath: string | null;
-  meta: string;
-  released: boolean;
-}
+import type { EpisodeView } from "@/types/media";
 
 interface Props {
   show: { id: number; title: string; posterPath: string | null; backdropPath: string | null };
@@ -28,14 +17,8 @@ export function EpisodeList({ show, episodes }: Props) {
   const { progress } = useLibrary();
   const last = progress.find((p) => p.mediaType === "tv" && p.id === show.id) ?? null;
 
-  const start = (index: number) => {
-    const ep = episodes[index];
-    if (!ep) return;
+  const start = (ep: EpisodeView) => {
     haptic("medium");
-    const upNext: EpisodeRef[] = episodes
-      .slice(index + 1)
-      .filter((e) => e.released)
-      .map((e) => ({ season: e.season, episode: e.episode, name: e.name }));
     play({
       mediaType: "tv",
       id: show.id,
@@ -45,7 +28,6 @@ export function EpisodeList({ show, episodes }: Props) {
       season: ep.season,
       episode: ep.episode,
       episodeName: ep.name,
-      upNext,
     });
   };
 
@@ -55,7 +37,7 @@ export function EpisodeList({ show, episodes }: Props) {
 
   return (
     <ol className="space-y-4 px-4">
-      {episodes.map((ep, i) => {
+      {episodes.map((ep) => {
         const isLast = last?.season === ep.season && last.episode === ep.episode;
         const pct = isLast && last.duration > 0 ? Math.min(100, (last.position / last.duration) * 100) : 0;
         return (
@@ -63,7 +45,7 @@ export function EpisodeList({ show, episodes }: Props) {
             <button
               type="button"
               disabled={!ep.released}
-              onClick={() => start(i)}
+              onClick={() => start(ep)}
               className="group flex w-full gap-3 text-left disabled:opacity-50"
             >
               <div className="relative aspect-video w-36 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-white/5 transition-transform group-active:scale-[0.97] sm:w-44">

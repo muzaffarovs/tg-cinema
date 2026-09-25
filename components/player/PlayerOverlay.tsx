@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSeason } from "@/lib/use-season";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { getProgress, removeProgress, saveProgress } from "@/lib/storage/library";
 import { haptic } from "@/lib/telegram/webapp";
 import { useBackHandler } from "@/components/telegram/TelegramProvider";
 import { CloseIcon, NextIcon } from "@/components/ui/icons";
+import type { EpisodeRef } from "@/types/player";
 import type { PlaybackSource } from "@/lib/playback/types";
 import type { PlaybackResponse, PlayRequest } from "@/types/player";
+import { EpisodePicker } from "./EpisodePicker";
 import { VideoPlayer } from "./VideoPlayer";
 
 type LoadState =
@@ -27,6 +30,7 @@ interface Props {
 export function PlayerOverlay({ request, onClose, onPlay }: Props) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [ended, setEnded] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const lastSave = useRef(0);
 
   useBackHandler(true, onClose);
@@ -39,7 +43,12 @@ export function PlayerOverlay({ request, onClose, onPlay }: Props) {
     return p.position;
   });
 
-  const next = request.mediaType === "tv" ? request.upNext?.[0] : undefined;
+  const isTv = request.mediaType === "tv";
+  const next = useNextEpisode(
+    request.id,
+    isTv ? request.season : null,
+    isTv ? request.episode : null,
+  );
 
   const record = useCallback(
     (position: number, duration: number) => {
@@ -114,16 +123,10 @@ export function PlayerOverlay({ request, onClose, onPlay }: Props) {
     if (request.mediaType === "movie") removeProgress("movie", request.id);
   }, [request]);
 
-  const playNext = () => {
-    if (request.mediaType !== "tv" || !next) return;
+  const playEpisode = (ep: EpisodeRef) => {
+    if (request.mediaType !== "tv") return;
     haptic("light");
-    onPlay({
-      ...request,
-      season: next.season,
-      episode: next.episode,
-      episodeName: next.name,
-      upNext: request.upNext?.slice(1),
-    });
+    onPlay({ ...request, season: ep.season, episode: ep.episode, episodeName: ep.name });
   };
 
   const subtitle =
@@ -147,10 +150,19 @@ export function PlayerOverlay({ request, onClose, onPlay }: Props) {
         >
           <CloseIcon />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{request.title}</p>
           {subtitle ? <p className="truncate text-xs text-white/60">{subtitle}</p> : null}
         </div>
+        {request.mediaType === "tv" ? (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="shrink-0 rounded-full bg-white/10 px-3.5 py-2 text-xs font-semibold active:bg-white/20"
+          >
+            Episodes
+          </button>
+        ) : null}
       </header>
 
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
@@ -191,6 +203,16 @@ export function PlayerOverlay({ request, onClose, onPlay }: Props) {
             onError={() => setState({ status: "error", message: "Playback failed for this source." })}
           />
         ) : null}
+
+        {pickerOpen && request.mediaType === "tv" ? (
+          <EpisodePicker
+            tvId={request.id}
+            currentSeason={request.season}
+            currentEpisode={request.episode}
+            onClose={() => setPickerOpen(false)}
+            onSelect={(ep) => playEpisode({ season: ep.season, episode: ep.episode, name: ep.name })}
+          />
+        ) : null}
       </div>
 
       {next ? (
@@ -200,17 +222,32 @@ export function PlayerOverlay({ request, onClose, onPlay }: Props) {
         >
           <button
             type="button"
-            onClick={playNext}
+            onClick={() => next && playEpisode(next)}
             className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
               ended ? "bg-accent text-accent-fg" : "bg-white/10 active:bg-white/20"
             }`}
           >
             <NextIcon size={16} />
-            Next: E{next.episode}
+            Next: {next.episode === 1 ? `S${next.season} · ` : ""}E{next.episode}
             {next.name ? <span className="max-w-[40vw] truncate font-normal opacity-80">{next.name}</span> : null}
           </button>
         </footer>
       ) : null}
     </div>
   );
+}
+
+/**
+ * The episode after (season, episode): the next released one in this season,
+ * otherwise episode 1 of the following season if it has aired.
+ */
+function useNextEpisode(tvId: number, season: number | null, episode: number | null): EpisodeRef | null {
+  const { data: current } = useSeason(tvId, season);
+  const following = current?.seasons.find((s) => season !== null && s.season > season && s.season > 0);
+  const inSeason = current?.episodes.find((e) => episode !== null && e.episode > episode && e.released);
+  const { data: nextSeason } = useSeason(tvId, !inSeason && following ? following.season : null);
+
+  if (inSeason) return { season: inSeason.season, episode: inSeason.episode, name: inSeason.name };
+  const first = nextSeason?.episodes.find((e) => e.released);
+  return first ? { season: first.season, episode: first.episode, name: first.name } : null;
 }

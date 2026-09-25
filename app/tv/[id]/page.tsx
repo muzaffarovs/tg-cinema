@@ -5,15 +5,21 @@ import { DetailsActions } from "@/components/details/DetailsActions";
 import { DetailsHero } from "@/components/details/DetailsHero";
 import { ImagesRow } from "@/components/details/ImagesRow";
 import { Overview } from "@/components/details/Overview";
-import { SeasonsRow } from "@/components/details/SeasonsRow";
+import { SeasonEpisodes } from "@/components/details/SeasonEpisodes";
 import { TrailersRow } from "@/components/details/TrailersRow";
 import { WatchProviders } from "@/components/details/WatchProviders";
 import { MediaRow } from "@/components/media/MediaRow";
 import { requireSession } from "@/lib/auth";
 import { getTmdbRegion } from "@/lib/env";
 import { formatDate, formatRuntime } from "@/lib/format";
-import { getTvDetails } from "@/lib/tmdb/api";
-import { aggregateCastToPeople, pickTrailers, regionProviders, tvToItem } from "@/lib/tmdb/normalize";
+import { getSeasonPayload, getTvDetails } from "@/lib/tmdb/api";
+import {
+  aggregateCastToPeople,
+  pickTrailers,
+  regionProviders,
+  toSeasonOptions,
+  tvToItem,
+} from "@/lib/tmdb/normalize";
 import { parseTmdbId } from "@/lib/validation";
 import type { TmdbTvDetails } from "@/types/tmdb";
 
@@ -45,11 +51,10 @@ export default async function TvPage({ params }: PageProps<"/tv/[id]">) {
   const item = tvToItem(show);
   const trailers = pickTrailers(show.videos.results);
 
-  // Specials (season 0) go last; the first regular season is the default start.
-  const seasons = [...show.seasons].sort(
-    (a, b) => (a.season_number === 0 ? 1 : 0) - (b.season_number === 0 ? 1 : 0) || a.season_number - b.season_number,
-  );
-  const firstSeason = seasons.find((s) => s.season_number > 0 && s.episode_count > 0) ?? seasons[0];
+  // Specials (season 0) are listed last; the first regular season is the default.
+  const seasons = toSeasonOptions(show.seasons);
+  const firstSeason = seasons.find((s) => s.season > 0) ?? seasons[0];
+  const initialSeason = firstSeason ? await getSeasonPayload(show.id, firstSeason.season).catch(() => null) : null;
   const next = show.next_episode_to_air;
 
   return (
@@ -73,7 +78,7 @@ export default async function TvPage({ params }: PageProps<"/tv/[id]">) {
       <DetailsActions
         item={item}
         trailer={trailers[0] ?? null}
-        firstEpisode={firstSeason ? { season: firstSeason.season_number, episode: 1, name: null } : undefined}
+        firstEpisode={firstSeason ? { season: firstSeason.season, episode: 1, name: null } : undefined}
       />
       <Overview text={show.overview} />
       <div className="mt-3 space-y-1 px-4 text-xs text-muted">
@@ -100,7 +105,12 @@ export default async function TvPage({ params }: PageProps<"/tv/[id]">) {
           </p>
         )}
       </div>
-      <SeasonsRow tvId={show.id} seasons={seasons} />
+      {initialSeason ? (
+        <SeasonEpisodes
+          show={{ id: show.id, title: show.name, posterPath: show.poster_path, backdropPath: show.backdrop_path }}
+          initial={initialSeason}
+        />
+      ) : null}
       <CastRow people={aggregateCastToPeople(show.aggregate_credits.cast)} />
       <TrailersRow trailers={trailers} />
       <ImagesRow title={show.name} paths={show.images.backdrops.slice(0, 12).map((i) => i.file_path)} />
